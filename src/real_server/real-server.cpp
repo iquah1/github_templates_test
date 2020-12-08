@@ -71,7 +71,7 @@ class Server {
 
  private:
   /**
-   * readData - reads data from our enclave
+   * readData - reads data from a local source (in reality just generate it) 
    * @param conf - config specifying parameters e.g number of rows to return,
    * some filter on returned rows, etc
    * @return complex matrix of values of interest
@@ -95,8 +95,6 @@ class Server {
   LPKeyPair<DCRTPoly> m_kp;
   CryptoContext<DCRTPoly> m_cc;
   int m_vectorSize = 0;
-  named_mutex *m_server_lock;
-  named_mutex *m_client_lock;
 };
 
 /////////////////////////////////////////////////////////////////

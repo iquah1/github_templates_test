@@ -38,7 +38,7 @@
 using namespace lbcrypto;
 
 std::tuple<CryptoContext<DCRTPoly>, LPPublicKey<DCRTPoly>>
-clientDeserializeDataFromServer(Configs &userConfigs) {
+clientDeserializeContextKeysFromServer(Configs &userConfigs) {
   /////////////////////////////////////////////////////////////////
   // NOTE: ReleaseAllContexts is imperative; it ensures that the environment
   // is cleared before loading anything. The function call ensures we are not
@@ -114,7 +114,19 @@ clientDeserializeDataFromServer(Configs &userConfigs) {
 
   return std::make_tuple(clientCC, clientPublicKey);
 }
-  
+
+Ciphertext<DCRTPoly> clientReceiveCT(const std::string location){
+  Ciphertext<DCRTPoly> c1;
+  if (!Serial::DeserializeFromFile(location, c1,
+								   SerType::BINARY)) {
+    std::cerr << "CLIENT: Cannot read serialization from " << location << std::endl;
+	removeLock(GConf.clientLock, GConf.CLIENT_LOCK);
+    std::exit(EXIT_FAILURE);
+  }
+  fRemove(location);
+  return c1;
+}
+
 void clientComputeAndSendDataToServer(CryptoContext<DCRTPoly> &clientCC,
 									  Ciphertext<DCRTPoly> &clientC1,
 									  Ciphertext<DCRTPoly> &clientC2,
@@ -161,9 +173,9 @@ void clientComputeAndSendDataToServer(CryptoContext<DCRTPoly> &clientCC,
 /////////////////////////////////////////////////////////////////////////////
 
 int main() {
-  Configs userConfigs = Configs();
+
   std::cout << "This program requires the subdirectory "
-            << userConfigs.DATAFOLDER << "' to exist, otherwise you will get "
+            << GConf.DATAFOLDER << "' to exist, otherwise you will get "
             << "an error writing serializations." << std::endl;
   /////////////////////////////////////////////////////////////////
   // Actual client work
@@ -179,41 +191,22 @@ int main() {
   std::cout << "CLIENT: acquire server lock" << std::endl;
   // the client will sleep until the server is done with the lock
   acquireLock(GConf.serverLock,GConf.SERVER_LOCK);
-  std::cout << "CLIENT: Acquired sever lock. Getting serialized data" << std::endl;
+  std::cout << "CLIENT: Acquired sever lock. Getting serialized crypto context and keys"
+			<< std::endl;
 
   releaseLock(GConf.serverLock,GConf.SERVER_LOCK);
 
-  auto ccAndPubKeyAsTuple = clientDeserializeDataFromServer(userConfigs);
+  auto ccAndPubKeyAsTuple = clientDeserializeContextKeysFromServer(GConf);
   auto clientCC = std::get<CRYPTOCONTEXT_INDEX>(ccAndPubKeyAsTuple);
   auto clientPublicKey = std::get<PUBLICKEY_INDEX>(ccAndPubKeyAsTuple);
+  
+  std::cout << "CLIENT: Getting ciphertexts" << std::endl;
+  Ciphertext<DCRTPoly> clientC1 = clientReceiveCT(GConf.DATAFOLDER + GConf.cipherOneLocation);
+  Ciphertext<DCRTPoly> clientC2 = clientReceiveCT(GConf.DATAFOLDER + GConf.cipherTwoLocation);
 
-  Ciphertext<DCRTPoly> clientC1;
-  Ciphertext<DCRTPoly> clientC2;
-  if (!Serial::DeserializeFromFile(
-          userConfigs.DATAFOLDER + userConfigs.cipherOneLocation, clientC1,
-          SerType::BINARY)) {
-    std::cerr << "CLIENT: Cannot read serialization from "
-              << userConfigs.DATAFOLDER + userConfigs.cipherOneLocation
-              << std::endl;
-	removeLock(GConf.clientLock, GConf.CLIENT_LOCK);
-    std::exit(EXIT_FAILURE);
-  }
-  fRemove(userConfigs.DATAFOLDER + userConfigs.cipherOneLocation);
-
-  if (!Serial::DeserializeFromFile(
-          userConfigs.DATAFOLDER + userConfigs.cipherTwoLocation, clientC2,
-          SerType::BINARY)) {
-    std::cerr << "CLIENT: Cannot read serialization from "
-              << userConfigs.DATAFOLDER + userConfigs.cipherTwoLocation
-              << std::endl;
-  removeLock(GConf.clientLock, GConf.CLIENT_LOCK);
-    std::exit(EXIT_FAILURE);
-  }
-  fRemove(userConfigs.DATAFOLDER + userConfigs.cipherOneLocation);
-
-  std::cout << "CLIENT: Computing and Serializing restults" << '\n';
+  std::cout << "CLIENT: Computing and Serializing results" << std::endl;
   clientComputeAndSendDataToServer(clientCC, clientC1, clientC2, clientPublicKey,
-                               userConfigs);
+                               GConf);
 
   std::cout << "CLIENT: Releasing Client lock" << std::endl;
   releaseLock(GConf.clientLock, GConf.CLIENT_LOCK);
