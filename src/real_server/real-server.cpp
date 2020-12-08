@@ -1,8 +1,15 @@
-// @file real-numbers-serialization-server - code to simulate a server to show
-// efficacy in a server-client relationship. The server serializes contexts and
-// keys for the client to then load. Afterwards, the server verifies that
-// everything is correct
-// @author: Ian Quah
+// @file real-server - code to simulate a server to show an example of encrypted
+// server-client processing relationships.
+//
+//The server serializes contexts, public key and processing keys for
+// the client to then load. It then generates and encrypts some data
+// to send to the client. The client loads the crypto context and
+// keys, then operates on the encrypted data, encrypts additional
+// data, and sends the results back to the server.  Finally, the
+// server decrypts the result and in this demo verifies that results
+// are correct.
+// 
+// @author: Ian Quah, Dave Cousins
 // TPOC: contact@palisade-crypto.org
 
 // @copyright Copyright (c) 2020, Duality Technologies Inc.
@@ -54,13 +61,13 @@ class Server {
   void provideData(const Configs &conf);
 
   /**
-   * receiveData - load data from some location (in this case from a file) and
-   * process it however the server was set up.
+   * receiveAndVerifyData - receive data from client and
+   * verify it. 
    *
    * @param conf - a config specifying certain parameters (in a real-life
    * scenario this could be number of rows, serialization format, etc.)
    */
-  void receiveData(const Configs &conf);
+  void receiveAndVerifyData(const Configs &conf);
 
  private:
   /**
@@ -88,6 +95,8 @@ class Server {
   LPKeyPair<DCRTPoly> m_kp;
   CryptoContext<DCRTPoly> m_cc;
   int m_vectorSize = 0;
+  named_mutex *m_server_lock;
+  named_mutex *m_client_lock;
 };
 
 /////////////////////////////////////////////////////////////////
@@ -105,6 +114,7 @@ Server::Server(int multDepth, int scaleFactorBits, int batchSize) {
   m_kp = m_cc->KeyGen();
   m_cc->EvalMultKeyGen(m_kp.secretKey);
   m_cc->EvalAtIndexKeyGen(m_kp.secretKey, {1, 2, -1, -2});
+
 }
 
 /**
@@ -119,9 +129,9 @@ void Server::provideData(const Configs &conf) {
 }
 
 /**
- * receiveData - "receive" a payload from the client and verify the results
+ * receiveAndVerifyData - "receive" a payload from the client and verify the results
  */
-void Server::receiveData(const Configs &conf) {
+void Server::receiveAndVerifyData(const Configs &conf) {
   /////////////////////////////////////////////////////////////////
   // Receive the data and decrpyt all of it
   /////////////////////////////////////////////////////////////////
@@ -131,7 +141,7 @@ void Server::receiveData(const Configs &conf) {
         << "which initiates a vector size tracker (dimensionality of data)";
     std::cerr << "for use in decryption."
               << "\n";
-    exit(1);
+    exit(EXIT_FAILURE);
   }
   Ciphertext<DCRTPoly> serverCiphertextFromClient_Mult;
   Ciphertext<DCRTPoly> serverCiphertextFromClient_Add;
@@ -141,17 +151,25 @@ void Server::receiveData(const Configs &conf) {
 
   Serial::DeserializeFromFile(conf.DATAFOLDER + conf.cipherMultLocation,
                               serverCiphertextFromClient_Mult, SerType::BINARY);
+  fRemove(conf.DATAFOLDER + conf.cipherMultLocation);
+  
   Serial::DeserializeFromFile(conf.DATAFOLDER + conf.cipherAddLocation,
                               serverCiphertextFromClient_Add, SerType::BINARY);
+  fRemove(conf.DATAFOLDER + conf.cipherAddLocation);
+
   Serial::DeserializeFromFile(conf.DATAFOLDER + conf.cipherRotLocation,
                               serverCiphertextFromClient_Rot, SerType::BINARY);
+  fRemove(conf.DATAFOLDER + conf.cipherRotLocation);
+
   Serial::DeserializeFromFile(conf.DATAFOLDER + conf.cipherRotNegLocation,
                               serverCiphertextFromClient_RogNeg,
                               SerType::BINARY);
+  fRemove(conf.DATAFOLDER + conf.cipherRotNegLocation);
+  
   Serial::DeserializeFromFile(conf.DATAFOLDER + conf.clientVectorLocation,
                               serverCiphertextFromClient_Vec, SerType::BINARY);
-  std::cout << "SERVER: Deserialized all data from client on server" << '\n'
-            << std::endl;
+  fRemove(conf.DATAFOLDER + conf.clientVectorLocation);
+  std::cout << "SERVER: Deserialized all processed encrypted data from client" << std::endl;
 
   Plaintext serverPlaintextFromClient_Mult;
   Plaintext serverPlaintextFromClient_Add;
@@ -209,7 +227,8 @@ void Server::receiveData(const Configs &conf) {
 /////////////////////////////////////////////////////////////////
 
 /**
- * readData - mock reading data from the enclave. We just use hardcoded vectors
+ * readData - mock reading data from a data base on the server. We
+ * just use hardcoded vectors
  * @return
  *  vector of hard-coded vectors (basically a matrix)
  */
@@ -252,6 +271,8 @@ ciphertextMatrix Server::packAndEncrypt(const complexMatrix &matrixOfData) {
  * @param matrix
  */
 void Server::writeData(const Configs &conf, const ciphertextMatrix &matrix) {
+
+  std::cout << "SERVER: sending cryptocontext" << std::endl;
   if (!Serial::SerializeToFile(conf.DATAFOLDER + conf.ccLocation, m_cc,
                                SerType::BINARY)) {
     std::cerr << "Error writing serialization of the crypto context to "
@@ -260,17 +281,14 @@ void Server::writeData(const Configs &conf, const ciphertextMatrix &matrix) {
     std::exit(1);
   }
 
-  demarcate("SERVER-SIDE: sending data");
-
-  std::cout << "SERVER: Cryptocontext serialized" << std::endl;
-
+  std::cout << "SERVER: sending Public key" << std::endl;
   if (!Serial::SerializeToFile(conf.DATAFOLDER + conf.pubKeyLocation,
                                m_kp.publicKey, SerType::BINARY)) {
     std::cerr << "Exception writing public key to pubkey.txt" << std::endl;
     std::exit(1);
   }
-  std::cout << "SERVER: Public key serialized" << std::endl;
 
+  std::cout << "SERVER: sending EvalMult/reliniarization key" << std::endl;
   std::ofstream multKeyFile(conf.DATAFOLDER + conf.multKeyLocation,
                             std::ios::out | std::ios::binary);
   if (multKeyFile.is_open()) {
@@ -278,15 +296,13 @@ void Server::writeData(const Configs &conf, const ciphertextMatrix &matrix) {
       std::cerr << "SERVER: Error writing eval mult keys" << std::endl;
       std::exit(1);
     }
-    std::cout << "SERVER: EvalMult/ relinearization keys have been serialized"
-              << std::endl;
     multKeyFile.close();
   } else {
     std::cerr << "SERVER: Error serializing EvalMult keys" << std::endl;
     std::exit(1);
   }
 
-  std::cout << "SERVER: Relinearization/ mult key serialized" << std::endl;
+  std::cout << "SERVER: sending Roation keys" << std::endl;
   std::ofstream rotationKeyFile(conf.DATAFOLDER + conf.rotKeyLocation,
                                 std::ios::out | std::ios::binary);
   if (rotationKeyFile.is_open()) {
@@ -294,13 +310,13 @@ void Server::writeData(const Configs &conf, const ciphertextMatrix &matrix) {
       std::cerr << "SERVER: Error writing rotation keys" << std::endl;
       std::exit(1);
     }
-    std::cout << "SERVER: Rotation keys have been serialized" << std::endl;
+    rotationKeyFile.close();
   } else {
     std::cerr << "SERVER: Error serializing Rotation keys" << std::endl;
     std::exit(1);
   }
 
-  std::cout << "SERVER: Rotation/ automorphism key serialized" << std::endl;
+  std::cout << "SERVER: sending encrypted data" << std::endl;
   if (!Serial::SerializeToFile(conf.DATAFOLDER + conf.cipherOneLocation,
                                matrix[0], SerType::BINARY)) {
     std::cerr << "SERVER: Error writing ciphertext 1" << std::endl;
@@ -315,59 +331,47 @@ void Server::writeData(const Configs &conf, const ciphertextMatrix &matrix) {
   };
   std::cout << "SERVER: ciphertext2 serialized" << std::endl;
 }
-
+/////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
 int main() {
-  Configs userConfigs = Configs();
+
   std::cout << "This program requres the subdirectory `"
-            << userConfigs.DATAFOLDER << "' to exist, otherwise you will get "
+            << GConf.DATAFOLDER << "' to exist, otherwise you will get "
             << "an error writing serializations." << std::endl;
 
-  std::cout << "SERVER 1: Acquiring lock"
-            << "\n";
-
-  acquireLock(SERVER_LOCK);
-  const int multDepth = 5;
+  std::cout << "SERVER: creating and acquiring server lock" << std::endl;
+  GConf.serverLock = createAndAcquireLock(GConf.SERVER_LOCK); 
+  std::cout << "SERVER: computing crypto context and keys" << std::endl;  
+  const int multDepth = 10;
   const int scaleFactorBits = 40;
   const usint batchSize = 32;
   Server server = Server(multDepth, scaleFactorBits, batchSize);
 
-  server.provideData(userConfigs);
-  std::cout << "SERVER 2: Releasing lock"
-            << "\n";
-  releaseLock(SERVER_LOCK);
-  while (fExists(CLIENT_LOCK)) {
-    nap();
-  }
+  server.provideData(GConf);
+  std::cout << "SERVER: Releasing server lock" << std::endl;
+  releaseLock(GConf.serverLock,GConf.SERVER_LOCK);
+  std::cout << "SERVER: Acquiring client lock" << std::endl;
+  GConf.clientLock = openLock(GConf.CLIENT_LOCK);
 
-  if (fExists(userConfigs.DATAFOLDER + "/client_write.txt")) {
-    std::cout << "SERVER 3: Found to-serialize-to" << std::endl;
-    // if the file we use as our flag exists, we nap until the lock has been
-    // released then we take it. At this point, we know serialization is
-    // finished
-    while (fExists(userConfigs.DATAFOLDER + CLIENT_LOCK)) {
-      std::cout << "SERVER 3: clients lock still exists. Napping" << std::endl;
-      nap(2000);
-    }
-  } else {
-    while (!fExists(userConfigs.DATAFOLDER + "/client_write.txt")) {
-      std::cout << "SERVER 3: did not find serialize-to" << std::endl;
-      nap(2000);
-    }
-    while (fExists(userConfigs.DATAFOLDER + CLIENT_LOCK)) {
-      std::cout
-          << "SERVER 3: found serialize-to now waiting for write to finish";
-      nap(2000);
-    }
-  }
-  std::cout << "SERVER 4: Acquiring lock" << std::endl;
-  acquireLock(SERVER_LOCK);
-  server.receiveData(userConfigs);
+  // the server will sleep until the client is done with the lock
+  acquireLock(GConf.clientLock,GConf.CLIENT_LOCK);
 
-  std::cout << "SERVER 5: Releasing lock" << std::endl;
-  releaseLock(SERVER_LOCK);
-  std::cout << "SERVER 6: Cleaning up" << std::endl;
-  fRemove(userConfigs.DATAFOLDER + "/client_write.txt");
-  fRemove(userConfigs.DATAFOLDER + userConfigs.ccLocation);
-  releaseLock(
-      CLIENT_LOCK);  // in case the lock exists from a prior session clear it.
+  std::cout << "SERVER: Acquiring Server lock" << std::endl;
+  acquireLock(GConf.serverLock, GConf.SERVER_LOCK);
+
+  std::cout << "SERVER: Receive and Verify data" << std::endl;
+  server.receiveAndVerifyData(GConf);
+
+  std::cout << "SERVER: Releasing Server lock" << std::endl;
+  releaseLock(GConf.serverLock, GConf.SERVER_LOCK);
+  std::cout << "SERVER: Releasing Client lock" << std::endl;
+  releaseLock(GConf.clientLock, GConf.CLIENT_LOCK);
+
+  std::cout << "SERVER: Cleaning up" << std::endl;
+  fRemove(GConf.DATAFOLDER + GConf.ccLocation);
+
+  removeLock(GConf.serverLock, GConf.SERVER_LOCK);
+  std::cout << "SERVER: Exiting" << std::endl;
+  
 }

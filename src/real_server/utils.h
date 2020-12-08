@@ -1,7 +1,7 @@
 // @file utils.h - utilities to be used with
 //    -real-numbers-serialization-client
 //    -real-numbers-serialization-server
-// @author: Ian Quah
+// @author: Ian Quah, David Cousins
 // TPOC: contact@palisade-crypto.org
 
 // @copyright Copyright (c) 2020, Duality Technologies Inc.
@@ -23,14 +23,15 @@
 // ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#ifndef PALISADE_SRC_PKE_EXAMPLES_REAL_NUMBER_SERIALIZATION_CLIENT_SERVER_UTILS_H_
-#define PALISADE_SRC_PKE_EXAMPLES_REAL_NUMBER_SERIALIZATION_CLIENT_SERVER_UTILS_H_
+#ifndef REAL_SERVER_UTILS_H
+#define REAL_SERVER_UTILS_H
 #include <palisade.h>
 #include "ciphertext-ser.h"
 #include "cryptocontext-ser.h"
 #include "pubkeylp-ser.h"
 #include "scheme/ckks/ckks-ser.h"
 #include "utils/serialize-binary.h"
+
 #include <chrono>
 #include <complex>
 #include <cstdio>
@@ -44,7 +45,11 @@
 #include <fstream>
 #include <thread>
 #include <cstring>
+#include <boost/interprocess/sync/named_mutex.hpp>
+#include <boost/interprocess/sync/scoped_lock.hpp>
+
 using namespace lbcrypto;
+using namespace boost::interprocess; //named mutexes for locks
 
 using complexVector = std::vector<std::complex<double>>;
 using complexMatrix = std::vector<complexVector>;
@@ -53,8 +58,23 @@ using ciphertextMatrix = std::vector<Ciphertext<DCRTPoly>>;
 const int VECTORSIZE = 4;
 const int CRYPTOCONTEXT_INDEX = 0;
 const int PUBLICKEY_INDEX = 1;
-const std::string CLIENT_LOCK = "/c_lock.txt";
-const std::string SERVER_LOCK = "/s_lock.txt";
+
+
+
+//note this uses make_unique which is C++14
+//  make_unique was left out of c++11, this is an accepted implementation
+// and what we use in current PALISADE
+
+#if __cplusplus < 201300 //true if less that c++14
+
+//  *nix implementation
+template <typename T, typename... Args>
+std::unique_ptr<T> make_unique(Args&&... args) {
+  return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
+#endif
+
 
 /**
  * Config container.
@@ -85,7 +105,17 @@ struct Configs {
   std::string cipherRotLocation = "/ciphertextRot.txt";
   std::string cipherRotNegLocation = "/ciphertextRotNegLocation.txt";
   std::string clientVectorLocation = "/ciphertextVectorFromClient.txt";
+
+  const std::string SERVER_LOCK = "s_lock";
+  const std::string CLIENT_LOCK = "c_lock";
+
+  //  std::unique_ptr<named_mutex> serverLock;
+  named_mutex *serverLock;
+  named_mutex *clientLock;
+
 };
+
+Configs GConf;  // global configuration structure that contains all locations for IPC
 
 /**
  * Demarcate - Visual separator between the sections of code
@@ -196,26 +226,6 @@ bool fRemove(const std::string &filename) {
 }
 
 /**
- * acquireLock
- *  - "get" the lock. Do this by writing the file
- */
-void acquireLock(const std::string &lockName) { std::ofstream file{lockName}; }
-
-/**
- * releaseLock
- *  - "release" the lock by deleting the file which then allows the other
- * process to get it
- */
-void releaseLock(const std::string &lockName) {
-  char lockCharArr[lockName.length()];
-  unsigned int i;
-  for (i = 0; i < sizeof(lockCharArr); i++) {
-    lockCharArr[i] = lockName[i];
-  }
-  std::remove(lockCharArr);
-}
-
-/**
  * Take a powernap of 0.5 seconds
  */
 void nap(const int &ms = 500) {
@@ -223,4 +233,86 @@ void nap(const int &ms = 500) {
   std::this_thread::sleep_for(timespan);
 }
 
-#endif  // PALISADE_SRC_PKE_EXAMPLES_REAL_NUMBER_SERIALIZATION_CLIENT_SERVER_UTILS_H_
+/**
+ * createAndAcquireLock
+ * create the lock and immediately "get" the lock.
+ */
+named_mutex* createAndAcquireLock(const std::string &lockName) {
+  try {
+	auto mtx = new named_mutex(create_only, lockName.c_str());
+	mtx->lock();
+	return mtx;
+  } catch (interprocess_exception &ex){
+	named_mutex::remove(lockName.c_str());
+	std::cerr<<"Error in createAndAquireLock create "<<lockName
+			 << " "<< ex.what() << std::endl;
+	exit(EXIT_FAILURE);
+  }
+  return NULL;
+}
+
+/**
+ * OpenLock
+ * open an existing lock
+ */
+named_mutex* openLock(const std::string &lockName) {
+  bool done(false);
+  while (!done) {
+	try {
+	  auto mtx = new named_mutex(open_only, lockName.c_str());
+	  done = true;
+	  
+	  return mtx;
+	} catch (interprocess_exception &ex){
+	  std::cerr<<"Error in openLock create "<<lockName
+			   << " "<< ex.what() << std::endl;
+	  nap(1000);
+	  
+	}
+  }
+  
+  return NULL;
+}
+
+/**
+ * acquireLock
+ *  - "get" the lock. sleeps until successful
+ */
+void acquireLock(named_mutex* mtx, const std::string &lockName) { 
+  try {
+	mtx->lock();
+  } catch (interprocess_exception &ex){
+	std::cerr<<"Error in aquireLock lock "<<lockName 
+			 << " "<< ex.what() << std::endl;
+  }
+
+
+}
+
+/**
+ * releaseLock
+ *  - "release" the lock
+ */
+void releaseLock(named_mutex* mtx, const std::string &lockName){
+  try {
+	mtx->unlock();
+  } catch (interprocess_exception &ex){
+	std::cerr<<"Error in releaseLock lock "<<lockName 
+			 << " "<< ex.what() << std::endl;
+  }
+}
+
+/**
+ * removeLock
+ *  - "remove" the lock by deleting it from the system
+ */
+void removeLock(named_mutex* mtx, const std::string &lockName){
+  try {
+	named_mutex::remove(lockName.c_str());
+  } catch (interprocess_exception &ex){
+	std::cerr<<"Error in removeLock lock "<<lockName 
+			 << " "<< ex.what() << std::endl;
+  }
+}
+
+#endif  // REAL_SERVER_UTILS_H

@@ -1,9 +1,15 @@
-// @file real-numbers-serialization-client - code to simulate a client to show
-// efficacy in a server-client relationship. The client releases all contexts
-// and keys (just to be extra safe), then loads in contexts and keys from the
-// server. The client then does operations on the data before re-serialization
-// and sending the data back to the server to verify
-// @author: Ian Quah
+// @file real-client - code to simulate a client to show an example of encrypted
+// server-client processing relationships.
+//
+//The server serializes contexts, public key and processing keys for
+// the client to then load. It then generates and encrypts some data
+// to send to the client. The client loads the crypto context and
+// keys, then operates on the encrypted data, encrypts additional
+// data, and sends the results back to the server.  Finally, the
+// server decrypts the result and in this demo verifies that results
+// are correct.
+// 
+// @author: Ian Quah, Dave Cousins
 // TPOC: contact@palisade-crypto.org
 
 // @copyright Copyright (c) 2020, Duality Technologies Inc.
@@ -25,8 +31,8 @@
 // ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#include "utils.h"
 
+#include "utils.h"
 #include "palisade.h"
 
 using namespace lbcrypto;
@@ -48,7 +54,8 @@ clientDeserializeDataFromServer(Configs &userConfigs) {
               << userConfigs.DATAFOLDER << "/cryptocontext.txt" << std::endl;
     std::exit(1);
   }
-
+  fRemove(userConfigs.DATAFOLDER + userConfigs.ccLocation);
+  
   /////////////////////////////////////////////////////////////////
   // NOTE: the following 2 lines are essential
   // It is possible that the keys are carried over in the cryptocontext
@@ -66,7 +73,8 @@ clientDeserializeDataFromServer(Configs &userConfigs) {
               << userConfigs.DATAFOLDER << "/cryptocontext.txt" << std::endl;
     std::exit(1);
   }
-  std::cout << "CLIENT: KP from server deserialized" << std::endl;
+  fRemove(userConfigs.DATAFOLDER + userConfigs.pubKeyLocation);
+  std::cout << "CLIENT: public key deserialized" << std::endl;
 
   std::ifstream multKeyIStream(
       userConfigs.DATAFOLDER + userConfigs.multKeyLocation,
@@ -82,9 +90,10 @@ clientDeserializeDataFromServer(Configs &userConfigs) {
               << std::endl;
     std::exit(1);
   }
+  multKeyIStream.close();
+  fRemove(userConfigs.DATAFOLDER + userConfigs.multKeyLocation);
+  std::cout << "CLIENT: Relinearization keys from server deserialized." << std::endl;
 
-  std::cout << "CLIENT: Relinearization keys from server deserialized."
-            << std::endl;
   std::ifstream rotKeyIStream(
       userConfigs.DATAFOLDER + userConfigs.rotKeyLocation,
       std::ios::in | std::ios::binary);
@@ -94,19 +103,24 @@ clientDeserializeDataFromServer(Configs &userConfigs) {
               << std::endl;
     std::exit(1);
   }
+
   if (!clientCC->DeserializeEvalAutomorphismKey(rotKeyIStream,
                                                 SerType::BINARY)) {
     std::cerr << "CLIENT: Could not deserialize eval rot key file" << std::endl;
     std::exit(1);
   }
+  rotKeyIStream.close();
+  fRemove(userConfigs.DATAFOLDER + userConfigs.rotKeyLocation);
+
   return std::make_tuple(clientCC, clientPublicKey);
 }
+  
+void clientComputeAndSendDataToServer(CryptoContext<DCRTPoly> &clientCC,
+									  Ciphertext<DCRTPoly> &clientC1,
+									  Ciphertext<DCRTPoly> &clientC2,
+									  LPPublicKey<DCRTPoly> &clientPublicKey,
+									  const Configs &userConfigs) {
 
-void clientSerializeDataForServer(CryptoContext<DCRTPoly> &clientCC,
-                                  Ciphertext<DCRTPoly> &clientC1,
-                                  Ciphertext<DCRTPoly> &clientC2,
-                                  LPPublicKey<DCRTPoly> &clientPublicKey,
-                                  const Configs &userConfigs) {
   std::cout << "CLIENT: Applying operations on data" << std::endl;
   auto clientCiphertextMult = clientCC->EvalMult(clientC1, clientC2);
   auto clientCiphertextAdd = clientCC->EvalAdd(clientC1, clientC2);
@@ -142,6 +156,10 @@ void clientSerializeDataForServer(CryptoContext<DCRTPoly> &clientCC,
       userConfigs.DATAFOLDER + userConfigs.clientVectorLocation,
       clientInitiatedEncryption, SerType::BINARY);
 }
+/////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+
 int main() {
   Configs userConfigs = Configs();
   std::cout << "This program requires the subdirectory "
@@ -152,43 +170,18 @@ int main() {
   /////////////////////////////////////////////////////////////////
 
   // basically we need the server to go first to write out all the serialization
-  // So, we wait to see if the first file exists yet, which is an indication
-  // that the server has started its job.
-  // File exists:
-  //    -> server is in the process. So, we sleep until the lock has been
-  //    released
-  // File NOT exists:
-  //    -> We sleep until the first file exists then we wait for the lock to be
-  //    released
-  std::cout << "CLIENT: Step 1: Wait for server" << std::endl;
-  if (fExists(userConfigs.DATAFOLDER + userConfigs.ccLocation)) {
-    std::cout << "CLIENT Step 1: Found indication that server is working. "
-                 "Waiting for lock to be released"
-              << std::endl;
-    // if the file we use as our flag exists, we nap until the lock has been
-    // released then we take it. At this point, we know serialization is
-    // finished
-    while (fExists(SERVER_LOCK)) {
-      std::cout << "CLIENT Step 1: Waiting for lock release. Taking a power nap"
-                << std::endl;
-      nap(2000);
-    }
-  } else {
-    while (!fExists(userConfigs.DATAFOLDER + userConfigs.ccLocation)) {
-      std::cout << "CLIENT Step 1: Waiting for server to start working and "
-                   "then for lock to be released"
-                << std::endl;
-      nap(2000);
-    }
-    while (fExists(SERVER_LOCK)) {
-      std::cout << "CLIENT Step 1: Waiting for lock release. Taking a power nap"
-                << std::endl;
-      nap(2000);
-    }
-  }
+  std::cout << "CLIENT: Open server lock" << std::endl;
 
-  std::cout << "CLIENT 2: Acquired lock. Getting serialized data";
-  acquireLock(CLIENT_LOCK);
+  GConf.serverLock = openLock(GConf.SERVER_LOCK);
+  std::cout << "CLIENT: create and acquire client lock" << std::endl;
+  GConf.clientLock = createAndAcquireLock(GConf.CLIENT_LOCK);
+
+  std::cout << "CLIENT: acquire server lock" << std::endl;
+  // the client will sleep until the server is done with the lock
+  acquireLock(GConf.serverLock,GConf.SERVER_LOCK);
+  std::cout << "CLIENT: Acquired sever lock. Getting serialized data" << std::endl;
+
+  releaseLock(GConf.serverLock,GConf.SERVER_LOCK);
 
   auto ccAndPubKeyAsTuple = clientDeserializeDataFromServer(userConfigs);
   auto clientCC = std::get<CRYPTOCONTEXT_INDEX>(ccAndPubKeyAsTuple);
@@ -202,8 +195,10 @@ int main() {
     std::cerr << "CLIENT: Cannot read serialization from "
               << userConfigs.DATAFOLDER + userConfigs.cipherOneLocation
               << std::endl;
-    std::exit(1);
+	removeLock(GConf.clientLock, GConf.CLIENT_LOCK);
+    std::exit(EXIT_FAILURE);
   }
+  fRemove(userConfigs.DATAFOLDER + userConfigs.cipherOneLocation);
 
   if (!Serial::DeserializeFromFile(
           userConfigs.DATAFOLDER + userConfigs.cipherTwoLocation, clientC2,
@@ -211,16 +206,23 @@ int main() {
     std::cerr << "CLIENT: Cannot read serialization from "
               << userConfigs.DATAFOLDER + userConfigs.cipherTwoLocation
               << std::endl;
-    std::exit(1);
+  removeLock(GConf.clientLock, GConf.CLIENT_LOCK);
+    std::exit(EXIT_FAILURE);
   }
+  fRemove(userConfigs.DATAFOLDER + userConfigs.cipherOneLocation);
 
-  std::cout << "CLIENT Step 3: Serializing data" << '\n';
-  clientSerializeDataForServer(clientCC, clientC1, clientC2, clientPublicKey,
+  std::cout << "CLIENT: Computing and Serializing restults" << '\n';
+  clientComputeAndSendDataToServer(clientCC, clientC1, clientC2, clientPublicKey,
                                userConfigs);
 
-  std::ofstream file{userConfigs.DATAFOLDER + "/client_write.txt"};
-  std::cout << "CLIENT Step 4: Serialized all data to be sent to server. "
-               "Releasing lock"
-            << std::endl;
-  releaseLock(CLIENT_LOCK);
+  std::cout << "CLIENT: Releasing Client lock" << std::endl;
+  releaseLock(GConf.clientLock, GConf.CLIENT_LOCK);
+  std::cout << "CLIENT: Acquiring Server lock" << std::endl;
+  acquireLock(GConf.serverLock,GConf.SERVER_LOCK);
+  std::cout << "CLIENT: Acquired server lock. Server is done" << std::endl;
+  releaseLock(GConf.serverLock,GConf.SERVER_LOCK);
+  std::cout << "CLIENT: Released server lock. Cleaning up" << std::endl;
+  removeLock(GConf.clientLock, GConf.CLIENT_LOCK);
+  std::cout << "CLIENT: Exiting" << std::endl;
+
 }
