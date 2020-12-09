@@ -51,14 +51,25 @@ class Server {
    */
   Server(int multDepth, int scaleFactorBits, int batchSize);
   /**
-   * provideData - read from some internal location, encrypt then send it off
+   * sendCCAndKeys send the CryptoContext and keys to client
+   * @param conf
+   */
+  void sendCCAndKeys(const Configs &conf);
+  /**
+   * actually writeData contained in matrix
+   * @param conf
+   * @param matrix
+   */
+
+  /**
+   * generateAndSendData - read from some internal location, encrypt then send it off
    * for some client to process
    *    - in this case we write the data directly to a file (specified in the
    * config)
    * @param conf - a config specifying certain parameters (in a real-life
    * scenario this could be number of rows, serialization format, etc.)
    */
-  void provideData(const Configs &conf);
+  void generateAndSendData(const Configs &conf);
 
   /**
    * receiveAndVerifyData - receive data from client and
@@ -86,11 +97,6 @@ class Server {
    */
   ciphertextMatrix packAndEncrypt(const complexMatrix &matrixOfData);
 
-  /**
-   * Write data
-   * @param conf
-   * @param matrix
-   */
   void writeData(const Configs &conf, const ciphertextMatrix &matrix);
   LPKeyPair<DCRTPoly> m_kp;
   CryptoContext<DCRTPoly> m_cc;
@@ -116,11 +122,12 @@ Server::Server(int multDepth, int scaleFactorBits, int batchSize) {
 }
 
 /**
- * provideData - receive a request from a client and "send" data over by writing
- * to a location
+ * generateAndSendData - process a request from a client and "send"
+ * data over by writing to a location
+ *
  * @param conf
  */
-void Server::provideData(const Configs &conf) {
+void Server::generateAndSendData(const Configs &conf) {
   auto rawData = readData(conf);
   auto ciphertexts = packAndEncrypt(rawData);
   writeData(conf, ciphertexts);
@@ -264,11 +271,10 @@ ciphertextMatrix Server::packAndEncrypt(const complexMatrix &matrixOfData) {
 }
 
 /**
- * writeData - write the read-pack-encrypt data to the specified locations.
+ * sendCCAndKeys - send the cc and keys specified locations.
  * @param conf
- * @param matrix
  */
-void Server::writeData(const Configs &conf, const ciphertextMatrix &matrix) {
+void Server::sendCCAndKeys(const Configs &conf) {
 
   std::cout << "SERVER: sending cryptocontext" << std::endl;
   if (!Serial::SerializeToFile(conf.DATAFOLDER + conf.ccLocation, m_cc,
@@ -300,7 +306,7 @@ void Server::writeData(const Configs &conf, const ciphertextMatrix &matrix) {
     std::exit(1);
   }
 
-  std::cout << "SERVER: sending Roation keys" << std::endl;
+  std::cout << "SERVER: sending Rotation keys" << std::endl;
   std::ofstream rotationKeyFile(conf.DATAFOLDER + conf.rotKeyLocation,
                                 std::ios::out | std::ios::binary);
   if (rotationKeyFile.is_open()) {
@@ -313,6 +319,14 @@ void Server::writeData(const Configs &conf, const ciphertextMatrix &matrix) {
     std::cerr << "SERVER: Error serializing Rotation keys" << std::endl;
     std::exit(1);
   }
+}
+/**
+ * writeData - write the read-pack-encrypt a matrix of data to the specified locations.
+ * @param conf
+ * @Param matrix
+ */
+void Server::writeData(const Configs &conf, const ciphertextMatrix &matrix) {
+
 
   std::cout << "SERVER: sending encrypted data" << std::endl;
   if (!Serial::SerializeToFile(conf.DATAFOLDER + conf.cipherOneLocation,
@@ -329,6 +343,8 @@ void Server::writeData(const Configs &conf, const ciphertextMatrix &matrix) {
   };
   std::cout << "SERVER: ciphertext2 serialized" << std::endl;
 }
+
+
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -346,7 +362,9 @@ int main() {
   const usint batchSize = 32;
   Server server = Server(multDepth, scaleFactorBits, batchSize);
 
-  server.provideData(GConf);
+  server.sendCCAndKeys(GConf);
+  
+  server.generateAndSendData(GConf);
   std::cout << "SERVER: Releasing server lock" << std::endl;
   releaseLock(GConf.serverLock,GConf.SERVER_LOCK);
   std::cout << "SERVER: Acquiring client lock" << std::endl;
