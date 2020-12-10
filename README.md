@@ -60,11 +60,11 @@ automatically find the installed libraries and include files:
 > `cd build`
 > `cmake ..`
 
-5. Build the system using make
+6. Build the system using make
 
 > `make`
 
-All the examples will be in the `bin` directory.
+All the examples will be in the `build/bin` directory.
 
 Running Examples
 =======================
@@ -73,7 +73,7 @@ From the build directory, make a demoData subdirectory.
 
 > `mkdir demoData`
 
-Open two windows and go to the build directory.
+Open two windows and cd to the build directory.
 
 In window 1 run the server
 
