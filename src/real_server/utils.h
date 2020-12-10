@@ -216,6 +216,7 @@ bool fExists(const std::string &filename) {
  *  bool: if true then the file already exists and we delete it
  */
 bool fRemove(const std::string &filename) {
+
   if (FILE *file = fopen(filename.c_str(), "r")) {
     fclose(file);
     std::remove(filename.c_str());

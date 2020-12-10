@@ -4,7 +4,7 @@ Sample programs for Encrypted Processing between cooperating processes.
 
 # Simple Client Server Real Number Serialization example 
 
-Found in the src/TBD directory. These file simulate a server with private data and a client that requests that data encrypted, performs computation on the data and sends the results back to the server for decryption. 
+Found in the src/real_server directory. These file simulate a server with private data and a client that requests that data encrypted, performs computation on the data and sends the results back to the server for decryption. 
 
 
 # Building
@@ -51,13 +51,13 @@ automatically find the installed libraries and include files:
 
 3. Clone this repo onto your system.
 
-4. Create the bin directory
+4. Create the build directory
 
-> `mkdir bin`
+> `mkdir build`
 
 5. Move to that directory and run `cmake`
 
-> `cd bin`
+> `cd build`
 > `cmake ..`
 
 5. Build the system using make
@@ -69,12 +69,20 @@ All the examples will be in the `bin` directory.
 Running Examples
 =======================
 
-TBD
+From the build directory, make a demoData subdirectory.
 
-From the root directory, run the  examples with 
+> `mkdir demoData`
 
-> `bin/foo`
+Open two windows and go to the build directory.
 
-> `bin/bar`
+In window 1 run the server
+
+> `bin/real-server`
+
+
+In window 2 run the client
+
+> `bin/real-client`
+
 
 

@@ -36,9 +36,10 @@
 #include "palisade.h"
 
 using namespace lbcrypto;
+using CT = Ciphertext<DCRTPoly>;
 
 std::tuple<CryptoContext<DCRTPoly>, LPPublicKey<DCRTPoly>>
-clientDeserializeContextKeysFromServer(Configs &userConfigs) {
+receiveCCAndKeys(void) {
   /////////////////////////////////////////////////////////////////
   // NOTE: ReleaseAllContexts is imperative; it ensures that the environment
   // is cleared before loading anything. The function call ensures we are not
@@ -47,14 +48,14 @@ clientDeserializeContextKeysFromServer(Configs &userConfigs) {
   CryptoContextFactory<DCRTPoly>::ReleaseAllContexts();
 
   CryptoContext<DCRTPoly> clientCC;
-  if (!Serial::DeserializeFromFile(
-          userConfigs.DATAFOLDER + userConfigs.ccLocation, clientCC,
-          SerType::BINARY)) {
+  if (!Serial::DeserializeFromFile(GConf.DATAFOLDER + GConf.ccLocation,
+				   clientCC,
+				   SerType::BINARY)) {
     std::cerr << "CLIENT: cannot read serialized data from: "
-              << userConfigs.DATAFOLDER << "/cryptocontext.txt" << std::endl;
+              << GConf.DATAFOLDER << "/cryptocontext.txt" << std::endl;
     std::exit(1);
   }
-  fRemove(userConfigs.DATAFOLDER + userConfigs.ccLocation);
+  fRemove(GConf.DATAFOLDER + GConf.ccLocation);
   
   /////////////////////////////////////////////////////////////////
   // NOTE: the following 2 lines are essential
@@ -66,22 +67,21 @@ clientDeserializeContextKeysFromServer(Configs &userConfigs) {
   clientCC->ClearEvalAutomorphismKeys();
 
   LPPublicKey<DCRTPoly> clientPublicKey;
-  if (!Serial::DeserializeFromFile(
-          userConfigs.DATAFOLDER + userConfigs.pubKeyLocation, clientPublicKey,
-          SerType::BINARY)) {
+  if (!Serial::DeserializeFromFile(GConf.DATAFOLDER + GConf.pubKeyLocation,
+				   clientPublicKey,
+				   SerType::BINARY)) {
     std::cerr << "CLIENT: cannot read serialized data from: "
-              << userConfigs.DATAFOLDER << "/cryptocontext.txt" << std::endl;
+              << GConf.DATAFOLDER << "/cryptocontext.txt" << std::endl;
     std::exit(1);
   }
-  fRemove(userConfigs.DATAFOLDER + userConfigs.pubKeyLocation);
+  fRemove(GConf.DATAFOLDER + GConf.pubKeyLocation);
   std::cout << "CLIENT: public key deserialized" << std::endl;
 
-  std::ifstream multKeyIStream(
-      userConfigs.DATAFOLDER + userConfigs.multKeyLocation,
-      std::ios::in | std::ios::binary);
+  std::ifstream multKeyIStream(GConf.DATAFOLDER + GConf.multKeyLocation,
+			       std::ios::in | std::ios::binary);
   if (!multKeyIStream.is_open()) {
     std::cerr << "CLIENT: cannot read serialization from "
-              << userConfigs.DATAFOLDER + userConfigs.multKeyLocation
+              << GConf.DATAFOLDER + GConf.multKeyLocation
               << std::endl;
     std::exit(1);
   }
@@ -91,15 +91,14 @@ clientDeserializeContextKeysFromServer(Configs &userConfigs) {
     std::exit(1);
   }
   multKeyIStream.close();
-  fRemove(userConfigs.DATAFOLDER + userConfigs.multKeyLocation);
+  fRemove(GConf.DATAFOLDER + GConf.multKeyLocation);
   std::cout << "CLIENT: Relinearization keys from server deserialized." << std::endl;
 
-  std::ifstream rotKeyIStream(
-      userConfigs.DATAFOLDER + userConfigs.rotKeyLocation,
-      std::ios::in | std::ios::binary);
+  std::ifstream rotKeyIStream(GConf.DATAFOLDER + GConf.rotKeyLocation,
+			      std::ios::in | std::ios::binary);
   if (!rotKeyIStream.is_open()) {
     std::cerr << "CLIENT: Cannot read serialization from "
-              << userConfigs.DATAFOLDER + userConfigs.multKeyLocation
+              << GConf.DATAFOLDER + GConf.multKeyLocation
               << std::endl;
     std::exit(1);
   }
@@ -110,28 +109,27 @@ clientDeserializeContextKeysFromServer(Configs &userConfigs) {
     std::exit(1);
   }
   rotKeyIStream.close();
-  fRemove(userConfigs.DATAFOLDER + userConfigs.rotKeyLocation);
+  fRemove(GConf.DATAFOLDER + GConf.rotKeyLocation);
 
   return std::make_tuple(clientCC, clientPublicKey);
 }
 
-Ciphertext<DCRTPoly> clientReceiveCT(const std::string location){
-  Ciphertext<DCRTPoly> c1;
+CT receiveCT(const std::string location){
+  CT c1;
   if (!Serial::DeserializeFromFile(location, c1,
-								   SerType::BINARY)) {
+				   SerType::BINARY)) {
     std::cerr << "CLIENT: Cannot read serialization from " << location << std::endl;
-	removeLock(GConf.clientLock, GConf.CLIENT_LOCK);
+    removeLock(GConf.clientLock, GConf.CLIENT_LOCK);
     std::exit(EXIT_FAILURE);
   }
   fRemove(location);
   return c1;
 }
 
-void clientComputeAndSendDataToServer(CryptoContext<DCRTPoly> &clientCC,
-									  Ciphertext<DCRTPoly> &clientC1,
-									  Ciphertext<DCRTPoly> &clientC2,
-									  LPPublicKey<DCRTPoly> &clientPublicKey,
-									  const Configs &userConfigs) {
+void computeAndSendData(CryptoContext<DCRTPoly> &clientCC,
+			CT &clientC1,
+			CT &clientC2,
+			LPPublicKey<DCRTPoly> &clientPublicKey) {
 
   std::cout << "CLIENT: Applying operations on data" << std::endl;
   auto clientCiphertextMult = clientCC->EvalMult(clientC1, clientC2);
@@ -146,27 +144,22 @@ void clientComputeAndSendDataToServer(CryptoContext<DCRTPoly> &clientCC,
   complexVector clientVector1 = {1.0, 2.0, 3.0, 4.0};
   if (clientVector1.size() != VECTORSIZE) {
     std::cerr << "clientVector1 size was modified. Must be of length 4"
-              << "\n";
+	      << std::endl;
     exit(1);
   }
   auto clientPlaintext1 = clientCC->MakeCKKSPackedPlaintext(clientVector1);
   auto clientInitiatedEncryption =
-      clientCC->Encrypt(clientPublicKey, clientPlaintext1);
-  Serial::SerializeToFile(
-      userConfigs.DATAFOLDER + userConfigs.cipherMultLocation,
-      clientCiphertextMult, SerType::BINARY);
-  Serial::SerializeToFile(
-      userConfigs.DATAFOLDER + userConfigs.cipherAddLocation,
-      clientCiphertextAdd, SerType::BINARY);
-  Serial::SerializeToFile(
-      userConfigs.DATAFOLDER + userConfigs.cipherRotLocation,
-      clientCiphertextRot, SerType::BINARY);
-  Serial::SerializeToFile(
-      userConfigs.DATAFOLDER + userConfigs.cipherRotNegLocation,
-      clientCiphertextRotNeg, SerType::BINARY);
-  Serial::SerializeToFile(
-      userConfigs.DATAFOLDER + userConfigs.clientVectorLocation,
-      clientInitiatedEncryption, SerType::BINARY);
+    clientCC->Encrypt(clientPublicKey, clientPlaintext1);
+  Serial::SerializeToFile(GConf.DATAFOLDER + GConf.cipherMultLocation,
+			  clientCiphertextMult, SerType::BINARY);
+  Serial::SerializeToFile(GConf.DATAFOLDER + GConf.cipherAddLocation,
+			  clientCiphertextAdd, SerType::BINARY);
+  Serial::SerializeToFile(GConf.DATAFOLDER + GConf.cipherRotLocation,
+			  clientCiphertextRot, SerType::BINARY);
+  Serial::SerializeToFile(GConf.DATAFOLDER + GConf.cipherRotNegLocation,
+			  clientCiphertextRotNeg, SerType::BINARY);
+  Serial::SerializeToFile(GConf.DATAFOLDER + GConf.clientVectorLocation,
+			  clientInitiatedEncryption, SerType::BINARY);
 }
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -174,6 +167,8 @@ void clientComputeAndSendDataToServer(CryptoContext<DCRTPoly> &clientCC,
 
 int main() {
 
+  // note GConf is a global structure defined in utils.h
+  
   std::cout << "This program requires the subdirectory "
             << GConf.DATAFOLDER << "' to exist, otherwise you will get "
             << "an error writing serializations." << std::endl;
@@ -191,22 +186,20 @@ int main() {
   std::cout << "CLIENT: acquire server lock" << std::endl;
   // the client will sleep until the server is done with the lock
   acquireLock(GConf.serverLock,GConf.SERVER_LOCK);
-  std::cout << "CLIENT: Acquired sever lock. Getting serialized crypto context and keys"
-			<< std::endl;
+  std::cout << "CLIENT: Acquired server lock. Getting serialized CryptoContext and keys" << std::endl;
 
   releaseLock(GConf.serverLock,GConf.SERVER_LOCK);
 
-  auto ccAndPubKeyAsTuple = clientDeserializeContextKeysFromServer(GConf);
+  auto ccAndPubKeyAsTuple = receiveCCAndKeys();
   auto clientCC = std::get<CRYPTOCONTEXT_INDEX>(ccAndPubKeyAsTuple);
   auto clientPublicKey = std::get<PUBLICKEY_INDEX>(ccAndPubKeyAsTuple);
   
   std::cout << "CLIENT: Getting ciphertexts" << std::endl;
-  Ciphertext<DCRTPoly> clientC1 = clientReceiveCT(GConf.DATAFOLDER + GConf.cipherOneLocation);
-  Ciphertext<DCRTPoly> clientC2 = clientReceiveCT(GConf.DATAFOLDER + GConf.cipherTwoLocation);
+  CT clientC1 = receiveCT(GConf.DATAFOLDER + GConf.cipherOneLocation);
+  CT clientC2 = receiveCT(GConf.DATAFOLDER + GConf.cipherTwoLocation);
 
   std::cout << "CLIENT: Computing and Serializing results" << std::endl;
-  clientComputeAndSendDataToServer(clientCC, clientC1, clientC2, clientPublicKey,
-                               GConf);
+  computeAndSendData(clientCC, clientC1, clientC2, clientPublicKey);
 
   std::cout << "CLIENT: Releasing Client lock" << std::endl;
   releaseLock(GConf.clientLock, GConf.CLIENT_LOCK);
