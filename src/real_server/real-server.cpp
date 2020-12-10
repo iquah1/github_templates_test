@@ -52,42 +52,31 @@ class Server {
   Server(int multDepth, int scaleFactorBits, int batchSize);
   /**
    * sendCCAndKeys send the CryptoContext and keys to client
-   * @param conf
    */
-  void sendCCAndKeys(const Configs &conf);
-  /**
-   * actually writeData contained in matrix
-   * @param conf
-   * @param matrix
-   */
+  void sendCCAndKeys(void);
 
   /**
    * generateAndSendData - read from some internal location, encrypt then send it off
    * for some client to process
-   *    - in this case we write the data directly to a file (specified in the
-   * config)
-   * @param conf - a config specifying certain parameters (in a real-life
-   * scenario this could be number of rows, serialization format, etc.)
+   *    - in this case we write the data directly to a file (specified in
+   * GConfig)
    */
-  void generateAndSendData(const Configs &conf);
+  void generateAndSendData(void);
 
   /**
    * receiveAndVerifyData - receive data from client and
    * verify it. 
    *
-   * @param conf - a config specifying certain parameters (in a real-life
-   * scenario this could be number of rows, serialization format, etc.)
    */
-  void receiveAndVerifyData(const Configs &conf);
+  void receiveAndVerifyData(void);
 
  private:
   /**
    * readData - reads data from a local source (in reality just generate it) 
-   * @param conf - config specifying parameters e.g number of rows to return,
-   * some filter on returned rows, etc
    * @return complex matrix of values of interest
    */
-  complexMatrix readData(const Configs &conf);
+  complexMatrix readData(void);
+
   /**
    * packAndEncrypt - pack messages (into plaintexts) and encrypt them (into
    * ciphertexts)
@@ -97,7 +86,12 @@ class Server {
    */
   ciphertextMatrix packAndEncrypt(const complexMatrix &matrixOfData);
 
-  void writeData(const Configs &conf, const ciphertextMatrix &matrix);
+  /**
+   * actually writeData contained in matrix
+   * @param matrix
+   */
+  void writeData(const ciphertextMatrix &matrix);
+
   LPKeyPair<DCRTPoly> m_kp;
   CryptoContext<DCRTPoly> m_cc;
   int m_vectorSize = 0;
@@ -125,18 +119,17 @@ Server::Server(int multDepth, int scaleFactorBits, int batchSize) {
  * generateAndSendData - process a request from a client and "send"
  * data over by writing to a location
  *
- * @param conf
  */
-void Server::generateAndSendData(const Configs &conf) {
-  auto rawData = readData(conf);
+void Server::generateAndSendData(void) {
+  auto rawData = readData();
   auto ciphertexts = packAndEncrypt(rawData);
-  writeData(conf, ciphertexts);
+  writeData(ciphertexts);
 }
 
 /**
  * receiveAndVerifyData - "receive" a payload from the client and verify the results
  */
-void Server::receiveAndVerifyData(const Configs &conf) {
+void Server::receiveAndVerifyData(void) {
   /////////////////////////////////////////////////////////////////
   // Receive the data and decrpyt all of it
   /////////////////////////////////////////////////////////////////
@@ -154,26 +147,26 @@ void Server::receiveAndVerifyData(const Configs &conf) {
   Ciphertext<DCRTPoly> serverCiphertextFromClient_RogNeg;
   Ciphertext<DCRTPoly> serverCiphertextFromClient_Vec;
 
-  Serial::DeserializeFromFile(conf.DATAFOLDER + conf.cipherMultLocation,
+  Serial::DeserializeFromFile(GConf.cipherMultLocation,
                               serverCiphertextFromClient_Mult, SerType::BINARY);
-  fRemove(conf.DATAFOLDER + conf.cipherMultLocation);
+  fRemove(GConf.cipherMultLocation);
   
-  Serial::DeserializeFromFile(conf.DATAFOLDER + conf.cipherAddLocation,
+  Serial::DeserializeFromFile(GConf.cipherAddLocation,
                               serverCiphertextFromClient_Add, SerType::BINARY);
-  fRemove(conf.DATAFOLDER + conf.cipherAddLocation);
+  fRemove(GConf.cipherAddLocation);
 
-  Serial::DeserializeFromFile(conf.DATAFOLDER + conf.cipherRotLocation,
+  Serial::DeserializeFromFile(GConf.cipherRotLocation,
                               serverCiphertextFromClient_Rot, SerType::BINARY);
-  fRemove(conf.DATAFOLDER + conf.cipherRotLocation);
+  fRemove(GConf.cipherRotLocation);
 
-  Serial::DeserializeFromFile(conf.DATAFOLDER + conf.cipherRotNegLocation,
+  Serial::DeserializeFromFile(GConf.cipherRotNegLocation,
                               serverCiphertextFromClient_RogNeg,
                               SerType::BINARY);
-  fRemove(conf.DATAFOLDER + conf.cipherRotNegLocation);
+  fRemove(GConf.cipherRotNegLocation);
   
-  Serial::DeserializeFromFile(conf.DATAFOLDER + conf.clientVectorLocation,
+  Serial::DeserializeFromFile(GConf.clientVectorLocation,
                               serverCiphertextFromClient_Vec, SerType::BINARY);
-  fRemove(conf.DATAFOLDER + conf.clientVectorLocation);
+  fRemove(GConf.clientVectorLocation);
   std::cout << "SERVER: Deserialized all processed encrypted data from client" << std::endl;
 
   Plaintext serverPlaintextFromClient_Mult;
@@ -237,9 +230,8 @@ void Server::receiveAndVerifyData(const Configs &conf) {
  * @return
  *  vector of hard-coded vectors (basically a matrix)
  */
-std::vector<std::vector<std::complex<double>>> Server::readData(
-    const Configs &conf) {
-  std::cout << "SERVER: Writing data to: " << conf.DATAFOLDER << "\n";
+std::vector<std::vector<std::complex<double>>> Server::readData(void) {
+  std::cout << "SERVER: Writing data to: " << GConf.DATAFOLDER << "\n";
 
   complexVector vec1 = {1.0, 2.0, 3.0, 4.0};
   complexVector vec2 = {12.5, 13.5, 14.5, 15.5};
@@ -274,10 +266,10 @@ ciphertextMatrix Server::packAndEncrypt(const complexMatrix &matrixOfData) {
  * sendCCAndKeys - send the cc and keys specified locations.
  * @param conf
  */
-void Server::sendCCAndKeys(const Configs &conf) {
+void Server::sendCCAndKeys(void) {
 
   std::cout << "SERVER: sending cryptocontext" << std::endl;
-  if (!Serial::SerializeToFile(conf.DATAFOLDER + conf.ccLocation, m_cc,
+  if (!Serial::SerializeToFile(GConf.ccLocation, m_cc,
                                SerType::BINARY)) {
     std::cerr << "Error writing serialization of the crypto context to "
                  "cryptocontext.txt"
@@ -286,14 +278,14 @@ void Server::sendCCAndKeys(const Configs &conf) {
   }
 
   std::cout << "SERVER: sending Public key" << std::endl;
-  if (!Serial::SerializeToFile(conf.DATAFOLDER + conf.pubKeyLocation,
+  if (!Serial::SerializeToFile(GConf.pubKeyLocation,
                                m_kp.publicKey, SerType::BINARY)) {
     std::cerr << "Exception writing public key to pubkey.txt" << std::endl;
     std::exit(1);
   }
 
   std::cout << "SERVER: sending EvalMult/reliniarization key" << std::endl;
-  std::ofstream multKeyFile(conf.DATAFOLDER + conf.multKeyLocation,
+  std::ofstream multKeyFile(GConf.multKeyLocation,
                             std::ios::out | std::ios::binary);
   if (multKeyFile.is_open()) {
     if (!m_cc->SerializeEvalMultKey(multKeyFile, SerType::BINARY)) {
@@ -307,7 +299,7 @@ void Server::sendCCAndKeys(const Configs &conf) {
   }
 
   std::cout << "SERVER: sending Rotation keys" << std::endl;
-  std::ofstream rotationKeyFile(conf.DATAFOLDER + conf.rotKeyLocation,
+  std::ofstream rotationKeyFile(GConf.rotKeyLocation,
                                 std::ios::out | std::ios::binary);
   if (rotationKeyFile.is_open()) {
     if (!m_cc->SerializeEvalAutomorphismKey(rotationKeyFile, SerType::BINARY)) {
@@ -321,22 +313,21 @@ void Server::sendCCAndKeys(const Configs &conf) {
   }
 }
 /**
- * writeData - write the read-pack-encrypt a matrix of data to the specified locations.
+ * writeData - write a matrix of data to the specified locations.
  * @param conf
  * @Param matrix
  */
-void Server::writeData(const Configs &conf, const ciphertextMatrix &matrix) {
-
+void Server::writeData(const ciphertextMatrix &matrix) {
 
   std::cout << "SERVER: sending encrypted data" << std::endl;
-  if (!Serial::SerializeToFile(conf.DATAFOLDER + conf.cipherOneLocation,
+  if (!Serial::SerializeToFile(GConf.cipherOneLocation,
                                matrix[0], SerType::BINARY)) {
     std::cerr << "SERVER: Error writing ciphertext 1" << std::endl;
     std::exit(1);
   }
 
   std::cout << "SERVER: ciphertext1 serialized" << std::endl;
-  if (!Serial::SerializeToFile(conf.DATAFOLDER + conf.cipherTwoLocation,
+  if (!Serial::SerializeToFile(GConf.cipherTwoLocation,
                                matrix[1], SerType::BINARY)) {
     std::cerr << "SERVER: Error writing ciphertext 2" << std::endl;
     std::exit(1);
@@ -362,9 +353,9 @@ int main() {
   const usint batchSize = 32;
   Server server = Server(multDepth, scaleFactorBits, batchSize);
 
-  server.sendCCAndKeys(GConf);
+  server.sendCCAndKeys();
   
-  server.generateAndSendData(GConf);
+  server.generateAndSendData();
   std::cout << "SERVER: Releasing server lock" << std::endl;
   releaseLock(GConf.serverLock,GConf.SERVER_LOCK);
   std::cout << "SERVER: Acquiring client lock" << std::endl;
@@ -377,7 +368,7 @@ int main() {
   acquireLock(GConf.serverLock, GConf.SERVER_LOCK);
 
   std::cout << "SERVER: Receive and Verify data" << std::endl;
-  server.receiveAndVerifyData(GConf);
+  server.receiveAndVerifyData();
 
   std::cout << "SERVER: Releasing Server lock" << std::endl;
   releaseLock(GConf.serverLock, GConf.SERVER_LOCK);
