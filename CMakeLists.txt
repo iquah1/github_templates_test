@@ -32,6 +32,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 ### ADD YOUR EXECUTABLE(s) HERE
 add_subDirectory(src/real_server)
+add_subDirectory(src/real_socket_server)
 #add_subDirectory(src/pre_server)
 
 ### add_executable( EXECUTABLE-NAME SOURCES )

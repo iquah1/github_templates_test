@@ -219,11 +219,11 @@ named_mutex* openLock(const std::string &lockName) {
       return mtx;
     } catch (interprocess_exception &ex){
       if (ex.what() == std::string("No such file or directory")) {
-	std::cout << "waiting for " << lockName << " to be created" << std::endl;
+		std::cout << "waiting for " << lockName << " to be created" << std::endl;
       } else {
-	std::cerr<<"Error in openLock create "<<lockName
-		 << " "<< ex.what() << std::endl;
-	exit(EXIT_FAILURE);
+		std::cerr<<"Error in openLock create "<<lockName
+				 << " "<< ex.what() << std::endl;
+		exit(EXIT_FAILURE);
       }
       nap(1000);
     }

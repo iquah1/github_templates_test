@@ -1,5 +1,5 @@
-// @file real-server - code to simulate a server to show an example of encrypted
-// server-client processing relationships.
+// @file real-socket-server - code to simulate a server to show an example of encrypted
+// server-client processing relationships via sockets.
 //
 //The server serializes contexts, public key and processing keys for
 // the client to then load. It then generates and encrypts some data
@@ -32,11 +32,12 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "utils.h"
+#include "utils-socket.h"
 #include "palisade.h"
-//#include "utils/debug.h"
+//#include "palisade/core/utils/debug.h"
 
 using namespace lbcrypto;
+
 
 /**
  * Mocks a server which supports some basic operations
@@ -52,24 +53,23 @@ class Server {
    */
   Server(int multDepth, int scaleFactorBits, int batchSize);
   /**
-   * sendCCAndKeys send the CryptoContext and keys to client
+   * sendCCAndKeys send the CryptoContext and keys to client via socket s
    */
-  void sendCCAndKeys(void);
+  void sendCCAndKeys(tcp::socket &s);
 
   /**
    * generateAndSendData - read from some internal location, encrypt then send it off
    * for some client to process
-   *    - in this case we write the data directly to a file (specified in
-   * GConfig)
+   *    - in this case we write the data directly to socket s
    */
-  void generateAndSendData(void);
+  void generateAndSendData(tcp::socket &s);
 
   /**
    * receiveAndVerifyData - receive data from client and
    * verify it. 
    *
    */
-  void receiveAndVerifyData(void);
+  void receiveAndVerifyData(tcp::socket &s);
 
  private:
   /**
@@ -88,13 +88,14 @@ class Server {
   ciphertextMatrix packAndEncrypt(const complexMatrix &matrixOfData);
 
   /**
-   * actually writeData contained in matrix
+   * actually writeData contained in matrix to socket s
+   * @param s socket 
    * @param matrix
    */
-  void writeData(const ciphertextMatrix &matrix);
+  void writeData(tcp::socket &s, const ciphertextMatrix &matrix);
 
-  LPKeyPair<DCRTPoly> m_kp;
-  CryptoContext<DCRTPoly> m_cc;
+  KeyPair m_kp; //contains secret and public key!
+  CC m_cc;
   int m_vectorSize = 0;
 };
 
@@ -103,8 +104,7 @@ class Server {
 /////////////////////////////////////////////////////////////////
 
 Server::Server(int multDepth, int scaleFactorBits, int batchSize) {
-  m_cc = CryptoContextFactory<DCRTPoly>::genCryptoContextCKKS(
-      multDepth, scaleFactorBits, batchSize);
+  m_cc = CFactory::genCryptoContextCKKS(multDepth, scaleFactorBits, batchSize);
 
   m_cc->Enable(ENCRYPTION);
   m_cc->Enable(SHE);
@@ -121,16 +121,16 @@ Server::Server(int multDepth, int scaleFactorBits, int batchSize) {
  * data over by writing to a location
  *
  */
-void Server::generateAndSendData(void) {
+void Server::generateAndSendData(tcp::socket &s) {
   auto rawData = readData();
   auto ciphertexts = packAndEncrypt(rawData);
-  writeData(ciphertexts);
+  writeData(s, ciphertexts);
 }
 
 /**
  * receiveAndVerifyData - "receive" a payload from the client and verify the results
  */
-void Server::receiveAndVerifyData(void) {
+void Server::receiveAndVerifyData(tcp::socket &s) {
   /////////////////////////////////////////////////////////////////
   // Receive the data and decrpyt all of it
   /////////////////////////////////////////////////////////////////
@@ -142,32 +142,18 @@ void Server::receiveAndVerifyData(void) {
               << "\n";
     exit(EXIT_FAILURE);
   }
-  Ciphertext<DCRTPoly> serverCiphertextFromClient_Mult;
-  Ciphertext<DCRTPoly> serverCiphertextFromClient_Add;
-  Ciphertext<DCRTPoly> serverCiphertextFromClient_Rot;
-  Ciphertext<DCRTPoly> serverCiphertextFromClient_RogNeg;
-  Ciphertext<DCRTPoly> serverCiphertextFromClient_Vec;
+  CT serverCiphertextFromClient_Mult;
+  CT serverCiphertextFromClient_Add;
+  CT serverCiphertextFromClient_Rot;
+  CT serverCiphertextFromClient_RogNeg;
+  CT serverCiphertextFromClient_Vec;
 
-  Serial::DeserializeFromFile(GConf.cipherMultLocation,
-                              serverCiphertextFromClient_Mult, SerType::BINARY);
-  fRemove(GConf.cipherMultLocation);
+  serverCiphertextFromClient_Mult = recvCT(s);
+  serverCiphertextFromClient_Add = recvCT(s);
+  serverCiphertextFromClient_Rot = recvCT(s);
+  serverCiphertextFromClient_RogNeg = recvCT(s);
+  serverCiphertextFromClient_Vec = recvCT(s);
   
-  Serial::DeserializeFromFile(GConf.cipherAddLocation,
-                              serverCiphertextFromClient_Add, SerType::BINARY);
-  fRemove(GConf.cipherAddLocation);
-
-  Serial::DeserializeFromFile(GConf.cipherRotLocation,
-                              serverCiphertextFromClient_Rot, SerType::BINARY);
-  fRemove(GConf.cipherRotLocation);
-
-  Serial::DeserializeFromFile(GConf.cipherRotNegLocation,
-                              serverCiphertextFromClient_RogNeg,
-                              SerType::BINARY);
-  fRemove(GConf.cipherRotNegLocation);
-  
-  Serial::DeserializeFromFile(GConf.clientVectorLocation,
-                              serverCiphertextFromClient_Vec, SerType::BINARY);
-  fRemove(GConf.clientVectorLocation);
   std::cout << "SERVER: Deserialized all processed encrypted data from client" << std::endl;
 
   Plaintext serverPlaintextFromClient_Mult;
@@ -232,7 +218,6 @@ void Server::receiveAndVerifyData(void) {
  *  vector of hard-coded vectors (basically a matrix)
  */
 std::vector<std::vector<std::complex<double>>> Server::readData(void) {
-  std::cout << "SERVER: Writing data to: " << GConf.DATAFOLDER << "\n";
 
   complexVector vec1 = {1.0, 2.0, 3.0, 4.0};
   complexVector vec2 = {12.5, 13.5, 14.5, 15.5};
@@ -252,7 +237,7 @@ std::vector<std::vector<std::complex<double>>> Server::readData(void) {
  */
 ciphertextMatrix Server::packAndEncrypt(const complexMatrix &matrixOfData) {
   auto container =
-      ciphertextMatrix(matrixOfData.size(), Ciphertext<DCRTPoly>());
+      ciphertextMatrix(matrixOfData.size(), CT());
 
   unsigned int ind = 0;
   for (auto &v : matrixOfData) {
@@ -267,125 +252,68 @@ ciphertextMatrix Server::packAndEncrypt(const complexMatrix &matrixOfData) {
  * sendCCAndKeys - send the cc and keys specified locations.
  * @param conf
  */
-void Server::sendCCAndKeys(void) {
+void Server::sendCCAndKeys(tcp::socket &s) {
 
-  std::cout << "SERVER: sending cryptocontext" << std::endl;
-  if (!Serial::SerializeToFile(GConf.ccLocation, m_cc,
-                               SerType::BINARY)) {
-    std::cerr << "Error writing serialization of the crypto context to "
-                 "cryptocontext.txt"
-              << std::endl;
-    std::exit(1);
-  }
-
-  std::cout << "SERVER: sending Public key" << std::endl;
-  if (!Serial::SerializeToFile(GConf.pubKeyLocation,
-                               m_kp.publicKey, SerType::BINARY)) {
-    std::cerr << "Exception writing public key to pubkey.txt" << std::endl;
-    std::exit(1);
-  }
-
-  std::cout << "SERVER: sending EvalMult/reliniarization key" << std::endl;
-  std::ofstream multKeyFile(GConf.multKeyLocation,
-                            std::ios::out | std::ios::binary);
-  if (multKeyFile.is_open()) {
-    if (!m_cc->SerializeEvalMultKey(multKeyFile, SerType::BINARY)) {
-      std::cerr << "SERVER: Error writing eval mult keys" << std::endl;
-      std::exit(1);
-    }
-    multKeyFile.close();
-  } else {
-    std::cerr << "SERVER: Error serializing EvalMult keys" << std::endl;
-    std::exit(1);
-  }
-
-  std::cout << "SERVER: sending Rotation keys" << std::endl;
-  std::ofstream rotationKeyFile(GConf.rotKeyLocation,
-                                std::ios::out | std::ios::binary);
-  if (rotationKeyFile.is_open()) {
-    if (!m_cc->SerializeEvalAutomorphismKey(rotationKeyFile, SerType::BINARY)) {
-      std::cerr << "SERVER: Error writing rotation keys" << std::endl;
-      std::exit(1);
-    }
-    rotationKeyFile.close();
-  } else {
-    std::cerr << "SERVER: Error serializing Rotation keys" << std::endl;
-    std::exit(1);
-  }
+  sendCC(s, m_cc);
+  sendPublicKey(s, m_kp.publicKey);
+  sendEvalMultKey(s, m_cc);
+  sendEvalAutomorphismKey(s, m_cc);
 }
 /**
  * writeData - write a matrix of data to the specified locations.
- * @param conf
- * @Param matrix
+ * @param s socket
+ * @Param matrix of data
  */
-void Server::writeData(const ciphertextMatrix &matrix) {
+void Server::writeData(tcp::socket &s, const ciphertextMatrix &matrix) {
 
   std::cout << "SERVER: sending encrypted data" << std::endl;
-  if (!Serial::SerializeToFile(GConf.cipherOneLocation,
-                               matrix[0], SerType::BINARY)) {
-    std::cerr << "SERVER: Error writing ciphertext 1" << std::endl;
-    std::exit(1);
+  for (size_t i = 0; i < matrix.size(); i++){
+	sendCT(s, matrix[i]);
+	std::cout << "SERVER: ciphertext " << i << " serialized" << std::endl;
   }
-
-  std::cout << "SERVER: ciphertext1 serialized" << std::endl;
-  if (!Serial::SerializeToFile(GConf.cipherTwoLocation,
-                               matrix[1], SerType::BINARY)) {
-    std::cerr << "SERVER: Error writing ciphertext 2" << std::endl;
-    std::exit(1);
-  };
-  std::cout << "SERVER: ciphertext2 serialized" << std::endl;
 }
 
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
-int main() {
-
-  std::cout << "This program requres the subdirectory `"
-            << GConf.DATAFOLDER << "' to exist, otherwise you will get "
-            << "an error writing serializations." << std::endl;
-
-  
+int main(int argc, char* argv[]) {
   TimeVar t;
   
-  const int multDepth = 10;
-  const int scaleFactorBits = 40;
-  const usint batchSize = 32;
-  Server server = Server(multDepth, scaleFactorBits, batchSize);
-  TIC(t);
+  try {
+	if (argc != 2) {
+	  std::cerr << "Usage: real-socket-server <port>\n";
+	  return 1;
+	}
+	const int multDepth = 5;
+	const int scaleFactorBits = 40;
+	const usint batchSize = 32;
+	Server server = Server(multDepth, scaleFactorBits, batchSize);
+	TIC(t);
 
-  std::cout << "SERVER: creating and acquiring server lock" << std::endl;
-  GConf.serverLock = createAndAcquireLock(GConf.SERVER_LOCK); 
-  std::cout << "SERVER: computing crypto context and keys" << std::endl;  
+	boost::asio::io_service io_service;
 
-  server.sendCCAndKeys();
-  
-  server.generateAndSendData();
-  std::cout << "SERVER: Releasing server lock" << std::endl;
-  releaseLock(GConf.serverLock,GConf.SERVER_LOCK);
-  std::cout << "SERVER: Acquiring client lock" << std::endl;
-  GConf.clientLock = openLock(GConf.CLIENT_LOCK);
+	std::cout << "SERVER: creating acceptor for " << argv[1] << std::endl;
+	tcp::acceptor a(io_service, tcp::endpoint(tcp::v4(), atoi( argv[1])));
+	std::cout << "SERVER: accepting socket" << std::endl;
 
-  // the server will sleep until the client is done with the lock
-  acquireLock(GConf.clientLock,GConf.CLIENT_LOCK);
+	tcp::socket s(io_service);
+	a.accept(s);
 
-  std::cout << "SERVER: Acquiring Server lock" << std::endl;
-  acquireLock(GConf.serverLock, GConf.SERVER_LOCK);
+	std::cout << "SERVER: sending CC and Keys" << std::endl;
+	server.sendCCAndKeys(s);
 
-  std::cout << "SERVER: Receive and Verify data" << std::endl;
-  server.receiveAndVerifyData();
+	std::cout << "SERVER: Generate and Send data" << std::endl;  
+	server.generateAndSendData(s);
 
-  std::cout << "SERVER: Releasing Server lock" << std::endl;
-  releaseLock(GConf.serverLock, GConf.SERVER_LOCK);
-  std::cout << "SERVER: Releasing Client lock" << std::endl;
-  releaseLock(GConf.clientLock, GConf.CLIENT_LOCK);
+	std::cout << "SERVER: Receive and Verify data" << std::endl;
+	server.receiveAndVerifyData(s);
 
-  std::cout << "SERVER: Cleaning up" << std::endl;
-  fRemove(GConf.DATAFOLDER + GConf.ccLocation);
+  } catch (std::exception& e) {
+    std::cerr << "Exception: " << e.what() << "\n";
+  }
 
-  removeLock(GConf.serverLock, GConf.SERVER_LOCK);
-  std::cout << "SERVER: Exiting" << std::endl;
   double totalTimeMSec = TOC_MS(t);
   std::cout << "SERVER: Total time: " << totalTimeMSec << " mSec" << std::endl;  
+  return EXIT_SUCCESS;
 }
