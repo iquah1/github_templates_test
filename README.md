@@ -2,10 +2,16 @@
 
 Sample programs for Encrypted Processing between cooperating processes.
 
-# Simple Client Server Real Number Serialization example 
+# Simple Client Server Real Number Serialization example - files and mutex 
 
-Found in the src/real_server directory. These file simulate a server with private data and a client that requests that data encrypted, performs computation on the data and sends the results back to the server for decryption. 
+Found in the src/real_server directory. These files simulate a server
+with private data and a client that requests that data encrypted,
+performs computation on the data and sends the results back to the
+server for decryption. Boost Mutex are used for synchronization. Data is serialized via files. 
 
+# Simple Client Server Real Number Serialization example - sockets
+
+Found in the src/real_socket_server directory. The same functionality as the above file version, but with boost sockets for IPC. Significantly faster than files (approx 3.5x faster).
 
 # Building
 
@@ -69,6 +75,9 @@ All the examples will be in the `build/bin` directory.
 Running Examples
 =======================
 
+Simple Client Server Real Number Serialization example - files and mutex 
+--------------------------
+
 From the build directory, make a demoData subdirectory.
 
 > `mkdir demoData`
@@ -84,5 +93,29 @@ In window 2 run the client
 
 > `bin/real-client`
 
+Note should an error occur (such as not being able to open a mutex),
+rerunning the code should clear and reinitialize the state. 
+
+Simple Client Server Real Number Serialization example - sockets
+---------------------------------------------------------
+
+From the build directory (this code does not need a demoData subdirectory)
+
+Open two windows and cd to the build directory.
+
+In window 1 run the server
 
 
+> `bin/real-socket-server <port-number>`
+
+where port-number is an unassigned TCP-IP port like 12345
+
+
+In window 2 run the client
+
+> `bin/real-socket-client <server-hostname> <port-number>`
+
+Where server-hostname is the resolvable name of the machine the server
+is running on, and port-number is the same port used by the
+server. For running on the same machine, you can use localhost as teh
+server-hostname
