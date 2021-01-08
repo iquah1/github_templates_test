@@ -12,7 +12,7 @@ project(SerialExamples CXX)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-find_package(Palisade)
+find_package(Palisade 1.10.6...)
 
 set( CMAKE_CXX_FLAGS ${PALISADE_CXX_FLAGS} )
 set( CMAKE_EXE_LINKER_FLAGS ${PALISADE_EXE_LINKER_FLAGS} )
@@ -33,9 +33,3 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 ### ADD YOUR EXECUTABLE(s) HERE
 add_subDirectory(src/real_server)
 add_subDirectory(src/real_socket_server)
-#add_subDirectory(src/pre_server)
-
-### add_executable( EXECUTABLE-NAME SOURCES )
-###
-### EXAMPLE:
-### add_executable( test demo-simple-example.cpp )

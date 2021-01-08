@@ -349,7 +349,7 @@ int main() {
   
   TimeVar t;
   
-  const int multDepth = 10;
+  const int multDepth = 5;
   const int scaleFactorBits = 40;
   const usint batchSize = 32;
   Server server = Server(multDepth, scaleFactorBits, batchSize);
