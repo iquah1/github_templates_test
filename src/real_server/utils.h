@@ -29,7 +29,7 @@
 #include "cryptocontext-ser.h"
 #include "pubkeylp-ser.h"
 #include "scheme/ckks/ckks-ser.h"
-#include "utils/serialize-binary.h"
+#include "utils/serial.h"
 
 #include <chrono>
 #include <complex>
