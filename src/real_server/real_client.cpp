@@ -176,19 +176,22 @@ int main() {
   // Actual client work
   /////////////////////////////////////////////////////////////////
 
-  // basically we need the server to go first to write out all the serialization
-  std::cout << "CLIENT: Open server lock" << std::endl;
 
+  // basically we need the server to be up and running first to write out all
+  // the serializations
+  std::cout << "CLIENT: Open server lock" << std::endl;
   GConf.serverLock = openLock(GConf.SERVER_LOCK);
+  
   std::cout << "CLIENT: create and acquire client lock" << std::endl;
   GConf.clientLock = createAndAcquireLock(GConf.CLIENT_LOCK);
+  releaseLock(GConf.clientLock,GConf.CLIENT_LOCK);
 
   std::cout << "CLIENT: acquire server lock" << std::endl;
+
   // the client will sleep until the server is done with the lock
   acquireLock(GConf.serverLock,GConf.SERVER_LOCK);
   std::cout << "CLIENT: Acquired server lock. Getting serialized CryptoContext and keys" << std::endl;
 
-  releaseLock(GConf.serverLock,GConf.SERVER_LOCK);
 
   auto ccAndPubKeyAsTuple = receiveCCAndKeys();
   auto clientCC = std::get<CRYPTOCONTEXT_INDEX>(ccAndPubKeyAsTuple);
@@ -201,14 +204,11 @@ int main() {
   std::cout << "CLIENT: Computing and Serializing results" << std::endl;
   computeAndSendData(clientCC, clientC1, clientC2, clientPublicKey);
 
+  std::cout << "CLIENT: Releasing Server lock" << std::endl;
+  releaseLock(GConf.serverLock,GConf.SERVER_LOCK);
   std::cout << "CLIENT: Releasing Client lock" << std::endl;
   releaseLock(GConf.clientLock, GConf.CLIENT_LOCK);
-  std::cout << "CLIENT: Acquiring Server lock" << std::endl;
-  acquireLock(GConf.serverLock,GConf.SERVER_LOCK);
-  std::cout << "CLIENT: Acquired server lock. Server is done" << std::endl;
-  releaseLock(GConf.serverLock,GConf.SERVER_LOCK);
-  std::cout << "CLIENT: Released server lock. Cleaning up" << std::endl;
-  removeLock(GConf.clientLock, GConf.CLIENT_LOCK);
+  // the server will clean up all locks and files. 
   std::cout << "CLIENT: Exiting" << std::endl;
 
 }
