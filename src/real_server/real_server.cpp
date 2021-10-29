@@ -71,6 +71,12 @@ class Server {
    */
   void receiveAndVerifyData(void);
 
+  /**
+   * cleanup files
+   * @param none
+   */
+  void cleanupFiles(void);
+
  private:
   /**
    * readData - reads data from a local source (in reality just generate it) 
@@ -92,6 +98,7 @@ class Server {
    * @param matrix
    */
   void writeData(const ciphertextMatrix &matrix);
+
 
   LPKeyPair<DCRTPoly> m_kp;
   CryptoContext<DCRTPoly> m_cc;
@@ -336,7 +343,24 @@ void Server::writeData(const ciphertextMatrix &matrix) {
   std::cout << "SERVER: ciphertext2 serialized" << std::endl;
 }
 
-
+/**
+ * cleanupFiles - removes all files from the system
+ * @param none
+ */
+void Server::cleanupFiles(void) {
+  std::cout <<" removing "<< GConf.ccLocation<<std::endl;
+  fRemove(GConf.ccLocation);
+  fRemove(GConf.pubKeyLocation);
+  fRemove(GConf.multKeyLocation);
+  fRemove(GConf.rotKeyLocation);
+  fRemove(GConf.cipherOneLocation);
+  fRemove(GConf.cipherTwoLocation);
+  fRemove(GConf.cipherMultLocation);
+  fRemove(GConf.cipherAddLocation);
+  fRemove(GConf.cipherRotLocation);
+  fRemove(GConf.cipherRotNegLocation);
+  fRemove(GConf.clientVectorLocation);
+}
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -355,20 +379,24 @@ int main() {
   Server server = Server(multDepth, scaleFactorBits, batchSize);
   TIC(t);
 
+  // clean up any stray files left from a previous crash!
+
+  std::cout << "SERVER: Cleaning up stray files" << std::endl;
+  server.cleanupFiles();
+  
   std::cout << "SERVER: creating and acquiring server lock" << std::endl;
   GConf.serverLock = createAndAcquireLock(GConf.SERVER_LOCK); 
   std::cout << "SERVER: computing crypto context and keys" << std::endl;  
 
   server.sendCCAndKeys();
-  
   server.generateAndSendData();
+
   std::cout << "SERVER: Releasing server lock" << std::endl;
   releaseLock(GConf.serverLock,GConf.SERVER_LOCK);
   std::cout << "SERVER: Acquiring client lock" << std::endl;
   GConf.clientLock = openLock(GConf.CLIENT_LOCK);
 
   // the server will sleep until the client is done with the lock
-  acquireLock(GConf.clientLock,GConf.CLIENT_LOCK);
 
   std::cout << "SERVER: Acquiring Server lock" << std::endl;
   acquireLock(GConf.serverLock, GConf.SERVER_LOCK);
@@ -378,13 +406,12 @@ int main() {
 
   std::cout << "SERVER: Releasing Server lock" << std::endl;
   releaseLock(GConf.serverLock, GConf.SERVER_LOCK);
-  std::cout << "SERVER: Releasing Client lock" << std::endl;
-  releaseLock(GConf.clientLock, GConf.CLIENT_LOCK);
 
-  std::cout << "SERVER: Cleaning up" << std::endl;
-  fRemove(GConf.DATAFOLDER + GConf.ccLocation);
+  std::cout << "SERVER: Cleaning up stray files and locks" << std::endl;
+  server.cleanupFiles();
 
   removeLock(GConf.serverLock, GConf.SERVER_LOCK);
+  removeLock(GConf.clientLock, GConf.CLIENT_LOCK);
   std::cout << "SERVER: Exiting" << std::endl;
   double totalTimeMSec = TOC_MS(t);
   std::cout << "SERVER: Total time: " << totalTimeMSec << " mSec" << std::endl;  

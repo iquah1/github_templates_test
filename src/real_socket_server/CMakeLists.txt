@@ -1,3 +1,2 @@
-add_executable(real-socket-client real-socket-client.cpp utils-socket.h)
-add_executable(real-socket-server real-socket-server.cpp utils-socket.h)
-
+add_executable(real_socket_client real_socket_client.cpp utils_socket.h)
+add_executable(real_socket_server real_socket_server.cpp utils_socket.h)
