@@ -17,21 +17,21 @@ body:
       label: Responsibility
       description: Are you willing to implement this feature?
       options:
-        - Yes
-        - No
+        - "Yes"
+        - "No"
     validations:
       required: true
-#
-#  - type: textarea
-#    id: url
-#    attributes:
-#      label: Pull Request URL
-#      description: Please paste the URL to the PR if applicable
-#  - type: checkboxes
-#    id: terms
-#    attributes:
-#      label: Code of Conduct
-#      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/openfheorg/openfhe-development#code-of-conduct)
-#      options:
-#        - label: I agree to follow this project's Code of Conduct
-#          required: true
+
+  - type: textarea
+    id: url
+    attributes:
+      label: Pull Request URL
+      description: Please paste the URL to the PR if applicable
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/openfheorg/openfhe-development#code-of-conduct)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
