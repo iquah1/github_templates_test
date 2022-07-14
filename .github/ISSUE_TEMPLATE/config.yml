@@ -4,5 +4,5 @@ contact_links:
     url: https://openfhe.discourse.group/c/user-questions/17
     about: Please ask for help regarding code here.
   - name: OpenFHE Security Reports
-    url: mailto:contact@openfhe.org
+    url: contact@openfhe.org
     about: Please report security vulnerabilities here.

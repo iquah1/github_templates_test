@@ -1,5 +1,7 @@
 name: OpenFHE Issue Template
 description: Use this template to report any issue
+title: "[Bug]: "
+labels: [ "bug", "triage" ]
 body:
   - type: dropdown
     id: issue-type
