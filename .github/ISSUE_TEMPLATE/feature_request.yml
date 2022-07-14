@@ -11,10 +11,11 @@ body:
       placeholder: "OpenFHE should have feature X"
     validations:
       required: true
+
   - type: dropdown
     id: will-you-do-it
     attributes:
-      label: Responsibility
+      label: Implementation
       description: Are you willing to implement this feature?
       options:
         - "Yes"
@@ -27,6 +28,7 @@ body:
     attributes:
       label: Pull Request URL
       description: Please paste the URL to the PR if applicable
+
   - type: checkboxes
     id: terms
     attributes:

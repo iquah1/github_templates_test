@@ -1,7 +1,7 @@
-name: OpenFHE Issue Template
-description: Use this template to report any issue
-title: "[Bug]: "
-labels: [ "bug", "triage" ]
+name: OpenFHE Code Bug Report
+description: Use this template to report any issues in the code
+title: "[Bug In Code]: "
+labels: [ "code-bug", "triage" ]
 body:
   - type: dropdown
     id: issue-type
@@ -13,17 +13,13 @@ body:
         - Bug
         - Build/Install
         - Performance
-        - Support
-        - Feature Request
-        - Documentation Feature Request
-        - Documentation Bug
         - Others
     validations:
       required: true
   - type: markdown
     attributes:
       value: |
-        Please make sure that this is a bug. All help requests should be directed to [OpenFHE Discourse](https://openfhe.discourse.group/c/user-questions/17)
+        Please make sure that this is a bug in the OpenFHE code. All help requests should be directed to [OpenFHE Discourse](https://openfhe.discourse.group/c/user-questions/17)
 
   - type: input
     id: version
@@ -62,7 +58,7 @@ body:
     validations:
       required: false
 
-  - type: input
+  - type: textarea
     id: build-information
     attributes:
       label: CMake Output
@@ -77,7 +73,6 @@ body:
       description: Also tell us, what did you expect to happen?
       placeholder: Tell us what you see!
       value: "A bug happened!"
-      render: shell
     validations:
       required: true
 
@@ -85,9 +80,8 @@ body:
     id: code-to-reproduce
     attributes:
       label: Standalone code to reproduce the issue
-      description: Provide a reproducible test case that is the bare minimum necessary to generate the problem. If possible, please share a link to Colab/Jupyter/any notebook.
-      placeholder: Tell us what you see!
-      render: shell
+      description: Provide a reproducible test case that is the bare minimum necessary to generate the problem. If necessary please share a link to a separate github repo which we can use to reproduce the error.
+      placeholder: Format any code with backticks
     validations:
       required: true
 
