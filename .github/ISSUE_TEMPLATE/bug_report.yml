@@ -25,8 +25,8 @@ body:
     id: version
     attributes:
       label: OpenFHE Version
-      description: What version of OpenFHE was installed?
-      placeholder: ex,. OpenFHE `X.Y.Z` where `X` is the major version, `Y` is the minor version, and `Z` is the patch version. This information can be found in the `CMakeLists.txt` file.
+      description: What version of OpenFHE was installed? This information can be found in the `CMakeLists.txt` file.
+      placeholder: ex,. OpenFHE `Major.Minor.Patch`.
     validations:
       required: true
 
@@ -79,7 +79,7 @@ body:
   - type: textarea
     id: code-to-reproduce
     attributes:
-      label: Standalone code to reproduce the issue
+      label: Standalone Code To Reproduce the Issue
       description: Provide a reproducible test case that is the bare minimum necessary to generate the problem. If necessary please share a link to a separate github repo which we can use to reproduce the error.
       placeholder: Format any code with backticks
     validations:
@@ -88,6 +88,15 @@ body:
   - type: textarea
     id: logs
     attributes:
-      label: Relevant log output
+      label: Relevant Log Output
       description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+      render: shell
+
+
+
+  - type: textarea
+    id: misc_info
+    attributes:
+      label: Relevant Misc. Information
+      description: Please add any other relevant information. This will be automatically formatted into code, so no need for backticks.
       render: shell

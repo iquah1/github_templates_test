@@ -32,4 +32,5 @@ body:
   - type: textarea
     id: fix
     attributes:
-      label: Are you willing to submit a fix? If so, please paste the fix URL below
+      label: URL to PR
+      description: Please paste the URL to a PR fix if relevant

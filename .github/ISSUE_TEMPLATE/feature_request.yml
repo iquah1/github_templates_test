@@ -12,22 +12,30 @@ body:
     validations:
       required: true
 
+
+  - type: textarea
+    id: reasoning
+    attributes:
+      label: Briefly Describe Why This Feature Is Important
+      placeholder: "This feature is useful because of X"
+
+
   - type: dropdown
     id: will-you-do-it
     attributes:
-      label: Implementation
-      description: Are you willing to implement this feature?
+      label: Are You Willing to Implement This Feature?
       options:
         - "Yes"
         - "No"
     validations:
       required: true
 
+
   - type: textarea
     id: url
     attributes:
       label: Pull Request URL
-      description: Please paste the URL to the PR if applicable
+      placeholder: Please paste the URL to the PR (if applicable)
 
   - type: checkboxes
     id: terms
