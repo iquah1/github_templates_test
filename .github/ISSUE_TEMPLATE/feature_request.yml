@@ -35,7 +35,7 @@ body:
     id: url
     attributes:
       label: Pull Request URL
-      placeholder: Please paste the URL to the PR (if applicable)
+      placeholder: Please Paste The Pull Request URL(if applicable)
 
   - type: checkboxes
     id: terms
