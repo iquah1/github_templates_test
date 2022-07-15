@@ -1,5 +1,3 @@
-# PALISADE Serialization examples
-
 Sample programs for Encrypted Processing between cooperating
 processes.  There are several example programs available that show how
 to use PALISADE to build systems of multiple cooperating heavyweight
