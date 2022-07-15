@@ -1,4 +1,3 @@
-
 # Always validate the PR title, and ignore the commits
 titleOnly: true
 # By default types specified in commitizen/conventional-commit-types is used.
