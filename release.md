@@ -1,5 +1,3 @@
-12/01/2020: PALISADE Serialization Examples v1.0 is released
-
 * Initial prototype release
 * Simple Client-Server Real Number Serialization examples - files and
   mutex, and boost sockets
