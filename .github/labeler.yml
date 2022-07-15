@@ -7,3 +7,12 @@ ci/cd:
 documentation:
   - README.md
   - ./*.md
+
+demodata:
+  - demoData
+
+olc:
+  - src/olc_net/*
+
+pre:
+  - src/pre_net/*
